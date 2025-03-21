@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Movie Recommender</title>
+    <title>Movies & TV Shows Recommendation System</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <style>
         body { background-color: #222; color: #fff; text-align: center; font-family: Arial, sans-serif; }
         .container { max-width: 600px; margin: auto; padding: 20px; }
-        .movie-input { position: relative; margin-bottom: 10px; }
+        .media-input { position: relative; margin-bottom: 10px; }
         .autocomplete-list { position: absolute; width: 100%; background: #333; border: 1px solid #555; max-height: 150px; overflow-y: auto; z-index: 1000; }
         .autocomplete-item { padding: 8px; cursor: pointer; border-bottom: 1px solid #777; }
         .autocomplete-item:hover { background: #555; }
@@ -17,38 +17,38 @@
 </head>
 <body>
     <div class="container">
-        <h2 class="mb-4">Movie Recommendation System</h2>
-        <form id="movieForm">
-            <div id="movieEntries">
-                <div class="movie-input">
-                    <input type="text" class="form-control movie-name" placeholder="Type movie name..." onkeyup="searchMovies(this)">
+        <h2 class="mb-4">Movies & TV Shows Recommendation System</h2>
+        <form id="mediaForm">
+            <div id="mediaEntries">
+                <div class="media-input">
+                    <input type="text" class="form-control media-name" placeholder="Type a movie or TV show..." onkeyup="searchMedia(this)">
                     <div class="autocomplete-list"></div>
-                    <input type="number" class="form-control movie-rating" min="1" max="100" step="1" placeholder="Rate (1 - 100)">
+                    <input type="number" class="form-control media-rating" min="1" max="100" step="1" placeholder="Rate (1 - 100)">
                 </div>
             </div>
-            <button type="button" class="btn btn-secondary" onclick="addMovieEntry()">+ Add Movie</button>
+            <button type="button" class="btn btn-secondary" onclick="addMediaEntry()">+ Add More</button>
             <button type="submit" class="btn btn-primary">Get Recommendations</button>
         </form>
 
-        <h3 class="mt-4">Recommended Movies:</h3>
+        <h3 class="mt-4">Recommended Movies & TV Shows:</h3>
         <ul id="recommendations" class="list-group mt-3"></ul>
     </div>
 
     <script>
-        function addMovieEntry() {
-            let container = document.getElementById("movieEntries");
+        function addMediaEntry() {
+            let container = document.getElementById("mediaEntries");
             let div = document.createElement("div");
-            div.classList.add("movie-input");
+            div.classList.add("media-input");
             div.innerHTML = `
-                <input type="text" class="form-control movie-name" placeholder="Type movie name..." onkeyup="searchMovies(this)">
+                <input type="text" class="form-control media-name" placeholder="Type a movie or TV show..." onkeyup="searchMedia(this)">
                 <div class="autocomplete-list"></div>
-                <input type="number" class="form-control movie-rating" min="1" max="100" step="1" placeholder="Rate (1 - 100)">
+                <input type="number" class="form-control media-rating" min="1" max="100" step="1" placeholder="Rate (1 - 100)">
                 <button type="button" class="btn btn-danger btn-sm mt-2" onclick="this.parentElement.remove()">Remove</button>
             `;
             container.appendChild(div);
         }
 
-        function searchMovies(input) {
+        function searchMedia(input) {
             let query = input.value.trim();
             let list = input.nextElementSibling;
             if (query.length < 2) {
@@ -63,7 +63,7 @@
                     data.movies.forEach(movie => {
                         let item = document.createElement("div");
                         item.classList.add("autocomplete-item");
-                        item.textContent = movie;
+                        item.textContent = movie;  // ✅ Movie title now includes release year
                         item.onclick = function() {
                             input.value = movie;
                             list.innerHTML = "";
@@ -73,17 +73,17 @@
                 });
         }
 
-        document.getElementById("movieForm").addEventListener("submit", function(event) {
+        document.getElementById("mediaForm").addEventListener("submit", function(event) {
             event.preventDefault();
-            let movieInputs = document.querySelectorAll(".movie-name");
-            let ratingInputs = document.querySelectorAll(".movie-rating");
+            let mediaInputs = document.querySelectorAll(".media-name");
+            let ratingInputs = document.querySelectorAll(".media-rating");
             let userRatings = {};
 
-            for (let i = 0; i < movieInputs.length; i++) {
-                let movie = movieInputs[i].value.trim();
+            for (let i = 0; i < mediaInputs.length; i++) {
+                let media = mediaInputs[i].value.trim();
                 let rating = ratingInputs[i].value.trim();
-                if (movie && rating) {
-                    userRatings[movie] = rating;
+                if (media && rating) {
+                    userRatings[media] = rating;
                 }
             }
 
@@ -94,11 +94,12 @@
             })
             .then(response => response.json())
             .then(data => {
+                console.log("Received Recommendations:", data);  // ✅ Debugging Line
                 let recommendationsList = document.getElementById("recommendations");
                 recommendationsList.innerHTML = "";
-                data.recommendations.forEach(movie => {
+                data.recommendations.forEach(media => {
                     let li = document.createElement("li");
-                    li.textContent = movie;
+                    li.textContent = media;
                     li.classList.add("list-group-item", "list-group-item-dark");
                     recommendationsList.appendChild(li);
                 });
