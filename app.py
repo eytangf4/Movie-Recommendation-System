@@ -209,7 +209,13 @@ def index():
                         recommendations[list(user_ratings.keys())[j]] = recommendations.get(list(user_ratings.keys())[j], 0) + (sim_score * 0.4)
 
         # ✅ Sort and return top recommendations
-        sorted_recommendations = sorted(recommendations.items(), key=lambda x: x[1], reverse=True)[:10]
+        # Exclude input titles from the final recommendations
+        input_titles = set(user_ratings.keys())
+        sorted_recommendations = sorted(
+            [(title, score) for title, score in recommendations.items() if title not in input_titles],
+            key=lambda x: x[1], reverse=True
+        )[:10]
+        
         return jsonify({"recommendations": [movie for movie, _ in sorted_recommendations]})
 
     return render_template("index.html")

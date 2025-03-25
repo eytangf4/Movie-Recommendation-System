@@ -12,6 +12,13 @@
         .autocomplete-list { position: absolute; width: 100%; background: #333; border: 1px solid #555; max-height: 150px; overflow-y: auto; z-index: 1000; }
         .autocomplete-item { padding: 8px; cursor: pointer; border-bottom: 1px solid #777; }
         .autocomplete-item:hover { background: #555; }
+        .recommendation-item {
+            background: #333;
+            padding: 10px;
+            margin: 6px 0;
+            border-radius: 6px;
+            text-align: left;
+        }
         button { margin-top: 10px; }
     </style>
 </head>
@@ -27,11 +34,18 @@
                 </div>
             </div>
             <button type="button" class="btn btn-secondary" onclick="addMediaEntry()">+ Add More</button>
-            <button type="submit" class="btn btn-primary">Get Recommendations</button>
+            <button type="button" id="recommend-btn" class="btn btn-primary">Get Recommendations</button>
         </form>
 
         <h3 class="mt-4">Recommended Movies & TV Shows:</h3>
         <ul id="recommendations" class="list-group mt-3"></ul>
+    </div>
+
+    <div id="loading" style="display:none;">
+        <h2>Loading recommendations...</h2>
+        <div style="width: 100%; background: #ddd; border-radius: 4px;">
+            <div id="progress-bar" style="width: 0%; background: #4CAF50; height: 20px; text-align: center; color: white; border-radius: 4px;">0%</div>
+        </div>
     </div>
 
     <script>
@@ -73,36 +87,46 @@
                 });
         }
 
-        document.getElementById("mediaForm").addEventListener("submit", function(event) {
-            event.preventDefault();
-            let mediaInputs = document.querySelectorAll(".media-name");
-            let ratingInputs = document.querySelectorAll(".media-rating");
-            let userRatings = {};
-
-            for (let i = 0; i < mediaInputs.length; i++) {
-                let media = mediaInputs[i].value.trim();
-                let rating = ratingInputs[i].value.trim();
-                if (media && rating) {
-                    userRatings[media] = rating;
+        document.getElementById("recommend-btn").addEventListener("click", function () {
+            const ratings = {};
+            document.querySelectorAll(".media-input").forEach(entry => {
+                const title = entry.querySelector(".media-name").value.trim();
+                const rating = entry.querySelector(".media-rating").value.trim();
+                if (title && rating) {
+                    ratings[title] = rating;
                 }
-            }
+            });
+
+
+            document.getElementById("loading").style.display = "block";
+            document.getElementById("progress-bar").style.width = "0%";
+            document.getElementById("progress-bar").textContent = "0%";
+
+            let progress = 0;
+            const interval = setInterval(() => {
+                if (progress < 95) {
+                    progress += Math.floor(Math.random() * 5);
+                    document.getElementById("progress-bar").style.width = progress + "%";
+                    document.getElementById("progress-bar").textContent = progress + "%";
+                }
+            }, 300);
 
             fetch("/", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ratings: userRatings })
+                body: JSON.stringify({ ratings })
             })
-            .then(response => response.json())
+            .then(res => res.json())
             .then(data => {
-                console.log("Received Recommendations:", data);  // ✅ Debugging Line
-                let recommendationsList = document.getElementById("recommendations");
-                recommendationsList.innerHTML = "";
-                data.recommendations.forEach(media => {
-                    let li = document.createElement("li");
-                    li.textContent = media;
-                    li.classList.add("list-group-item", "list-group-item-dark");
-                    recommendationsList.appendChild(li);
-                });
+                clearInterval(interval);
+                document.getElementById("progress-bar").style.width = "100%";
+                document.getElementById("progress-bar").textContent = "100%";
+                document.getElementById("loading").style.display = "none";
+
+                const recs = data.recommendations;
+                document.getElementById("recommendations").innerHTML =
+                    recs.length > 0 ? `<h3>Recommendations:</h3>${recs.map(r => `<div class="recommendation-item">${r}</div>`).join('')}` :
+                    `<p>No recommendations found.</p>`;
             });
         });
     </script>
