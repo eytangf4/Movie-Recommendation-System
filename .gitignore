@@ -1,4 +1,3 @@
 .venv
 .env
-movies.csv
-ratings.csv
+data

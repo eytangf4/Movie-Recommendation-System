@@ -1,224 +1,252 @@
 import os
-import requests
 import pandas as pd
-import re
-from flask import Flask, render_template, request, jsonify
+import numpy as np
+import json
+import time
+import sqlite3
+from flask import Flask, request, jsonify, render_template, Response, session, redirect, g
+from werkzeug.security import generate_password_hash, check_password_hash
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer
-from scipy.sparse import coo_matrix, csr_matrix
-from sklearn.neighbors import NearestNeighbors
+from sklearn.decomposition import TruncatedSVD
 from dotenv import load_dotenv
 
-# ✅ Load TMDb API Key
 load_dotenv()
-TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "fallback_dev_key")
+DATABASE = "users.db"
 
-# ✅ Load MovieLens Ratings & Movies
-ratings_df = pd.read_csv("ratings.csv")
-movies_df = pd.read_csv("movies.csv")
+# ----------------- Database ------------------
+def get_db():
+    db = getattr(g, '_database', None)
+    if db is None:
+        db = g._database = sqlite3.connect(DATABASE)
+    return db
 
-# ✅ Prevent merging movies with the same title
-ratings_df = ratings_df.groupby(["userId", "movieId"], as_index=False).rating.mean()
+def init_db():
+    with app.app_context():
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS recommendations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                movie_title TEXT NOT NULL,
+                rating REAL NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        db.commit()
 
-# ✅ Merge movieId back to get correct movie titles
-ratings_df = ratings_df.merge(movies_df[["movieId", "title"]], on="movieId", how="left")
+@app.teardown_appcontext
+def close_connection(exception):
+    db = getattr(g, '_database', None)
+    if db is not None:
+        db.close()
 
-# ✅ Limit dataset size to optimize performance (top 50,000 users & movies)
-top_users = ratings_df["userId"].value_counts().head(50000).index
-top_movies = ratings_df["movieId"].value_counts().head(50000).index
-filtered_ratings = ratings_df[(ratings_df["userId"].isin(top_users)) & (ratings_df["movieId"].isin(top_movies))]
+# ----------------- Auth Routes ------------------
+@app.route("/")
+def home():
+    return render_template("login.html")
 
-# ✅ Ensure movies with the same title but different years stay separate
-filtered_ratings = ratings_df.groupby(["userId", "movieId"], as_index=False).rating.mean()
+@app.route("/signup", methods=["POST"])
+def signup():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    if not username or not password:
+        return jsonify({"error": "Missing username or password"}), 400
 
-# ✅ Convert ratings into a sparse matrix (No pivot table!)
-user_ids = filtered_ratings["userId"].astype("category").cat.codes
-movie_ids = filtered_ratings["movieId"].astype("category").cat.codes
-ratings = filtered_ratings["rating"].values
+    password_hash = generate_password_hash(password)
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash))
+        db.commit()
+        user_id = cursor.lastrowid
+        session["user_id"] = user_id
+        session["username"] = username
+        return jsonify({"message": "User created and logged in"}), 201
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Username already taken"}), 409
 
-user_movie_ratings_sparse = coo_matrix((ratings, (user_ids, movie_ids))).tocsr()
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    db = get_db()
+    user = db.execute("SELECT id, password_hash FROM users WHERE username = ?", (username,)).fetchone()
+    if user and check_password_hash(user[1], password):
+        session["user_id"] = user[0]
+        session["username"] = username
+        return jsonify({"message": "Logged in"})
+    return jsonify({"error": "Invalid credentials"}), 401
 
-# ✅ Create a mapping of movieId -> internal index
-unique_movie_ids = filtered_ratings["movieId"].astype("category")
-movie_index_to_id = dict(enumerate(unique_movie_ids.cat.categories))
-id_to_movie_index = {v: k for k, v in movie_index_to_id.items()}  # Reverse lookup
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/")
 
-# ✅ Use Approximate Nearest Neighbors (KNN) instead of Full Cosine Similarity
-knn_model = NearestNeighbors(metric="cosine", algorithm="brute", n_neighbors=10, n_jobs=-1)
-knn_model.fit(user_movie_ratings_sparse.T)
+@app.route("/recommend")
+def recommend_page():
+    if "user_id" not in session:
+        return redirect("/")
+    return render_template("index.html", username=session.get("username"))
 
-def get_similar_movies(movie_id, num_neighbors=10):
-    """Finds similar movies using Approximate Nearest Neighbors."""
-    if movie_id not in id_to_movie_index:
-        return []
-    
-    movie_index = id_to_movie_index[movie_id]
-    distances, indices = knn_model.kneighbors(user_movie_ratings_sparse.T[movie_index], n_neighbors=num_neighbors)
-    
-    similar_movies = [movie_index_to_id[idx] for idx in indices.flatten()[1:]]  # Skip first (itself)
-    return similar_movies
+# ----------------- User Recommendations ------------------
+@app.route("/user_recommendations", methods=["GET"])
+def get_user_recommendations():
+    if "user_id" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    db = get_db()
+    recs = db.execute("SELECT id, movie_title, rating FROM recommendations WHERE user_id = ? ORDER BY timestamp DESC", (session["user_id"],)).fetchall()
+    return jsonify([{"id": r[0], "title": r[1], "rating": r[2]} for r in recs])
 
-# ✅ Fetch Genre Mapping from TMDb API
-def get_genre_mapping():
-    """Fetches genre ID-to-name mapping from TMDb API."""
-    url_movie = f"https://api.themoviedb.org/3/genre/movie/list?api_key={TMDB_API_KEY}&language=en-US"
-    url_tv = f"https://api.themoviedb.org/3/genre/tv/list?api_key={TMDB_API_KEY}&language=en-US"
+@app.route("/user_recommendations", methods=["POST"])
+def save_user_recommendations():
+    if "user_id" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json()
+    db = get_db()
+    for title, rating in data.items():
+        db.execute("INSERT INTO recommendations (user_id, movie_title, rating) VALUES (?, ?, ?)", (session["user_id"], title, rating))
+    db.commit()
+    return jsonify({"message": "Recommendations saved"})
 
-    movie_genres = requests.get(url_movie).json().get("genres", [])
-    tv_genres = requests.get(url_tv).json().get("genres", [])
+@app.route("/user_recommendations/<int:rec_id>", methods=["PATCH"])
+def update_user_recommendation(rec_id):
+    if "user_id" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json()
+    new_rating = data.get("rating")
+    db = get_db()
+    db.execute("UPDATE recommendations SET rating = ? WHERE id = ? AND user_id = ?", (new_rating, rec_id, session["user_id"]))
+    db.commit()
+    return jsonify({"message": "Recommendation updated"})
 
-    return {g["id"]: g["name"] for g in movie_genres + tv_genres}
+@app.route("/user_recommendations/<int:rec_id>", methods=["DELETE"])
+def delete_user_recommendation(rec_id):
+    if "user_id" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    db = get_db()
+    db.execute("DELETE FROM recommendations WHERE id = ? AND user_id = ?", (rec_id, session["user_id"]))
+    db.commit()
+    return jsonify({"message": "Recommendation deleted"})
 
-GENRE_MAPPING = get_genre_mapping()
+# ----------------- Recommendation Setup ------------------
+movies_df = pd.read_csv("data/movies.csv")
+ratings_df = pd.read_csv("data/ratings.csv")
 
-# ✅ Remove Year from Titles (Fixes TMDb Search)
-def clean_title(title):
-    """Removes release year from a title (e.g., 'The Avengers (2012)' → 'The Avengers')"""
-    return re.sub(r'\(\d{4}\)', '', title).strip()
+movies_df["genres"] = movies_df["genres"].replace("(no genres listed)", "")
 
-# ✅ Search MovieLens Dataset Before TMDb
-def search_movie_lens(title):
-    """Search MovieLens dataset dynamically instead of preloading."""
-    for chunk in pd.read_csv("movies.csv", chunksize=10000):  # Load in chunks
-        matched_movies = chunk[chunk["title"].str.contains(title, case=False, na=False)]
-        if not matched_movies.empty:
-            return matched_movies.iloc[0]  # Return first match
-    return None  # If not found
+tfidf = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b")
+tfidf_matrix = tfidf.fit_transform(movies_df["genres"])
 
-# ✅ Search TMDb (Falls Back if MovieLens Doesn’t Find It)
-def search_tmdb(query):
-    """First checks MovieLens, then queries TMDb if needed."""
-    cleaned_query = clean_title(query)
+title_to_index = pd.Series(movies_df.index, index=movies_df["title"])
 
-    # ✅ Try Finding in MovieLens First
-    matched_movie = search_movie_lens(cleaned_query)
-    if matched_movie is not None:
-        return [{
-            "tmdb_id": matched_movie["movieId"],
-            "title": matched_movie["title"],
-            "genres": matched_movie["genres"],
-            "type": "movie"
-        }]
+top_users = ratings_df["userId"].value_counts().head(5000).index
+top_movies = ratings_df["movieId"].value_counts().head(5000).index
+filtered_ratings = ratings_df[ratings_df["userId"].isin(top_users) & ratings_df["movieId"].isin(top_movies)]
 
-    # ✅ If Not in MovieLens, Query TMDb API
-    url = f"https://api.themoviedb.org/3/search/multi?api_key={TMDB_API_KEY}&query={cleaned_query}&language=en-US"
-    response = requests.get(url).json()
-    results = response.get("results", [])
+user_movie_matrix = filtered_ratings.pivot_table(index="userId", columns="movieId", values="rating").fillna(0)
 
-    valid_results = []
-    for item in results:
-        if item.get("media_type") in ["movie", "tv"]:
-            title = item.get("title") or item.get("name")
-            release_date = item.get("release_date") or item.get("first_air_date", "Unknown")
-            release_year = release_date.split("-")[0] if release_date and release_date != "Unknown" else "N/A"
-            genres = ", ".join([GENRE_MAPPING.get(genre_id, "Unknown") for genre_id in item.get("genre_ids", [])])
+svd = TruncatedSVD(n_components=50, random_state=42)
+user_factors = svd.fit_transform(user_movie_matrix)
+movie_factors = svd.components_.T
 
-            valid_results.append({
-                "tmdb_id": item["id"],
-                "title": f"{title} ({release_year})",
-                "genres": genres,
-                "type": item["media_type"]
-            })
+movieId_to_index = {movie_id: i for i, movie_id in enumerate(user_movie_matrix.columns)}
+movie_id_subset = list(user_movie_matrix.columns)
+movie_index_subset = movies_df[movies_df['movieId'].isin(movie_id_subset)].index
 
-    return valid_results
-
-# ✅ Fetch Movie/TV Details for Content-Based Filtering
-def get_detailed_info(tmdb_id, content_type):
-    """Fetch detailed metadata for a movie/TV show from TMDb."""
-    url = f"https://api.themoviedb.org/3/{content_type}/{tmdb_id}?api_key={TMDB_API_KEY}&append_to_response=credits"
-    response = requests.get(url).json()
-
-    cast = ", ".join([c["name"] for c in response.get("credits", {}).get("cast", [])[:5]])
-    director = ", ".join([c["name"] for c in response.get("credits", {}).get("crew", []) if c["job"] == "Director"])
-    genres = ", ".join([g["name"] for g in response.get("genres", [])])
-
-    return {
-        "title": response.get("title") or response.get("name"),
-        "genres": genres,
-        "cast": cast,
-        "director": director
-    }
-
-# ✅ Compute Content-Based Similarity
-def compute_similarity(data):
-    """Compute TF-IDF similarity between movies based on metadata."""
-    tfidf_vectorizer = TfidfVectorizer(stop_words="english")
-    content_matrix = tfidf_vectorizer.fit_transform(data)
-    return cosine_similarity(content_matrix)
+latest_ratings_payload = {}
 
 @app.route("/search")
 def search():
-    query = request.args.get("query", "").strip().lower()
-    if not query:
-        return jsonify({"movies": []})
+    if "user_id" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    query = request.args.get("query", "").lower()
+    matching = movies_df[movies_df["title"].str.lower().str.contains(query, na=False)].copy()
+    return jsonify({"movies": matching["title"].tolist()})
 
-    # ✅ Search MovieLens first
-    matching_movies = movies_df[movies_df["title"].str.lower().str.contains(query, na=False)]
-    
-    # ✅ Fall back to TMDb API if no results
-    if matching_movies.empty:
-        tmdb_results = search_tmdb(query)
-        movies_list = [f"{movie['title']}" for movie in tmdb_results]  # Includes release year
-    else:
-        movies_list = matching_movies["title"].tolist()
+@app.route("/prepare_recommendation", methods=["POST"])
+def prepare_recommendation():
+    if "user_id" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    global latest_ratings_payload
+    latest_ratings_payload = request.json
+    return '', 204
 
-    return jsonify({"movies": movies_list})
+@app.route("/progress_recommend")
+def progress_recommend():
+    if "user_id" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        user_ratings = request.json.get("ratings", {})
-        all_metadata = []
-        recommendations = {}
+    user_ratings = latest_ratings_payload
+    rated_titles = list(user_ratings.keys())
+    rated_scores = list(user_ratings.values())
 
-        for title, rating in user_ratings.items():
-            search_results = search_tmdb(title)
-            if not search_results:
-                continue
+    def generate():
+        valid_entries = [(title, float(score)) for title, score in zip(rated_titles, rated_scores) if title in title_to_index]
+        if not valid_entries:
+            yield f"data: {json.dumps({'progress': 100, 'step': 'No valid titles', 'recommendations': []})}\n\n"
+            return
 
-            tmdb_id = search_results[0]["tmdb_id"]
-            content_type = search_results[0]["type"]
-            details = get_detailed_info(tmdb_id, content_type)
+        yield f"data: {json.dumps({'progress': 10, 'step': 'Processing ratings'})}\n\n"
+        time.sleep(0.2)
 
-            metadata = details["genres"] + " " + details["cast"] + " " + details["director"]
-            all_metadata.append(metadata)
+        rated_indices = [title_to_index[title] for title, _ in valid_entries]
+        rated_movie_ids = [movies_df.loc[i, "movieId"] for i in rated_indices]
+        rated_ratings = [score for _, score in valid_entries]
 
-            # ✅ Create mappings between movie IDs and titles
-            title_to_movie_id = dict(zip(movies_df["title"], movies_df["movieId"]))
-            movie_id_to_title = dict(zip(movies_df["movieId"], movies_df["title"]))
+        rated_svd_indices = [movieId_to_index[movie_id] for movie_id in rated_movie_ids if movie_id in movieId_to_index]
+        collaborative_scores = np.zeros(len(movie_id_subset))
 
+        yield f"data: {json.dumps({'progress': 30, 'step': 'Calculating collaborative scores'})}\n\n"
+        time.sleep(0.3)
 
-            # ✅ Collaborative Filtering (Weight = 60%)
-            if title in title_to_movie_id:  # Convert title to movieId
-                movie_id = title_to_movie_id[title]
-                similar_movies_cf = get_similar_movies(movie_id, num_neighbors=10)  # Get similar movies
+        if rated_svd_indices:
+            user_vector = np.zeros(movie_factors.shape[1])
+            total_weight = 0.0
+            for idx, rating in zip(rated_svd_indices, rated_ratings):
+                user_vector += movie_factors[idx] * rating
+                total_weight += rating
+            if total_weight > 0:
+                user_vector /= total_weight
+            collaborative_scores = cosine_similarity(user_vector.reshape(1, -1), movie_factors)[0]
 
-                for sim_movie_id in similar_movies_cf:
-                    sim_movie_title = movie_id_to_title.get(sim_movie_id, "Unknown")
-                    recommendations[sim_movie_title] = recommendations.get(sim_movie_title, 0) + (float(rating) / 100) * 0.6
+        yield f"data: {json.dumps({'progress': 60, 'step': 'Calculating content-based scores'})}\n\n"
+        time.sleep(0.3)
 
+        rated_genre_matrix = tfidf_matrix[rated_indices]
+        user_profile = rated_genre_matrix.T.dot(np.array(rated_ratings))
+        content_scores = cosine_similarity(user_profile.reshape(1, -1), tfidf_matrix)[0]
+        content_scores_subset = content_scores[movie_index_subset]
 
-        # ✅ Content-Based Filtering (Weight = 40%)
-        if all_metadata:
-            content_similarity = compute_similarity(all_metadata)
-            for i, title in enumerate(user_ratings.keys()):
-                for j, sim_score in enumerate(content_similarity[i]):
-                    if i != j:
-                        recommendations[list(user_ratings.keys())[j]] = recommendations.get(list(user_ratings.keys())[j], 0) + (sim_score * 0.4)
+        yield f"data: {json.dumps({'progress': 80, 'step': 'Combining scores'})}\n\n"
+        time.sleep(0.2)
 
-        # ✅ Sort and return top recommendations
-        # Exclude input titles from the final recommendations
-        input_titles = set(user_ratings.keys())
-        sorted_recommendations = sorted(
-            [(title, score) for title, score in recommendations.items() if title not in input_titles],
-            key=lambda x: x[1], reverse=True
-        )[:10]
-        
-        return jsonify({"recommendations": [movie for movie, _ in sorted_recommendations]})
+        hybrid_scores = 0.6 * collaborative_scores + 0.4 * content_scores_subset
+        recommended_titles = (
+            movies_df.iloc[movie_index_subset].assign(score=hybrid_scores)
+            .sort_values("score", ascending=False)
+            .loc[~movies_df.iloc[movie_index_subset]["title"].isin(rated_titles)]
+            .head(10)["title"]
+            .tolist()
+        )
 
-    return render_template("index.html")
+        yield f"data: {json.dumps({'progress': 100, 'step': 'Done', 'recommendations': recommended_titles})}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream")
 
 if __name__ == "__main__":
+    init_db()
     app.run(debug=True, host="0.0.0.0", port=8080)
