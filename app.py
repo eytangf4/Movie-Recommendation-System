@@ -118,9 +118,14 @@ def save_user_recommendations():
     data = request.get_json()
     db = get_db()
     for title, rating in data.items():
-        db.execute("INSERT INTO recommendations (user_id, movie_title, rating) VALUES (?, ?, ?)", (session["user_id"], title, rating))
+        # Check if the movie already exists
+        existing = db.execute("SELECT id FROM recommendations WHERE user_id = ? AND movie_title = ?", (session["user_id"], title)).fetchone()
+        if existing:
+            db.execute("UPDATE recommendations SET rating = ?, timestamp = CURRENT_TIMESTAMP WHERE id = ?", (rating, existing[0]))
+        else:
+            db.execute("INSERT INTO recommendations (user_id, movie_title, rating) VALUES (?, ?, ?)", (session["user_id"], title, rating))
     db.commit()
-    return jsonify({"message": "Recommendations saved"})
+    return jsonify({"message": "Recommendations saved or updated"})
 
 @app.route("/user_recommendations/<int:rec_id>", methods=["PATCH"])
 def update_user_recommendation(rec_id):
