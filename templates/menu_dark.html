@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Movie Recommender</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #18181b 0%, #23272f 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .dark-card {
+      background: #23272f;
+      border-radius: 1.5rem;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.25);
+      padding: 3rem 2.5rem;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+      border: 2px solid #4f8cff;
+    }
+    .dark-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 2.5rem;
+      color: #4f8cff;
+      letter-spacing: 1px;
+      text-shadow: 0 2px 8px #18181b;
+    }
+    .dark-btn {
+      width: 100%;
+      margin-bottom: 1.25rem;
+      font-size: 1.15rem;
+      padding: 0.85rem 0;
+      border-radius: 0.75rem;
+      font-weight: 500;
+      border: none;
+      transition: box-shadow 0.2s, background 0.2s;
+      background: #18181b;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(79,140,255,0.10);
+    }
+    .dark-btn:last-child { margin-bottom: 0; }
+    .dark-btn:hover {
+      background: #4f8cff;
+      color: #fff;
+      box-shadow: 0 4px 16px #4f8cff44;
+    }
+    .dark-icon {
+      margin-right: 0.5em;
+      vertical-align: middle;
+      font-size: 1.2em;
+      color: #4f8cff;
+    }
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+</head>
+<body>
+  <div class="dark-card">
+    <div class="dark-title">Movie Recommender</div>
+    <a href="/library" class="btn dark-btn"><i class="fa-solid fa-film dark-icon"></i>Edit Library</a>
+    <a href="/recommend_from_library" class="btn dark-btn"><i class="fa-solid fa-magic-wand-sparkles dark-icon"></i>Generate Recommendations</a>
+    <a href="/one_off_recommend" class="btn dark-btn"><i class="fa-solid fa-bolt dark-icon"></i>One-Off Recommendation</a>
+  </div>
+</body>
+</html>

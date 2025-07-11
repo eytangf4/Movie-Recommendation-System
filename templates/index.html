@@ -5,9 +5,59 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Movie Recommender</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         body {
-            padding-top: 4rem;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #e0e7ff 0%, #f8fafc 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            color: #2d3a4b;
+        }
+        .glass-card {
+            background: rgba(255,255,255,0.7);
+            border-radius: 2rem;
+            box-shadow: 0 8px 32px 0 rgba(31,38,135,0.18);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 2.5rem 2rem 2rem 2rem;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            color: #2d3a4b;
+            letter-spacing: 1px;
+        }
+        .input-group input, .input-group button {
+            border-radius: 0.75rem;
+            font-size: 1.1rem;
+        }
+        .btn-primary {
+            background: #4f8cff;
+            border: none;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            font-size: 1.1rem;
+            padding: 0.7rem 0.9rem;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+        .btn-secondary {
+            border-radius: 0.75rem;
+            font-weight: 600;
+            font-size: 1.1rem;
+            padding: 0.7rem 0.9rem;
         }
         .autocomplete-item {
             cursor: pointer;
@@ -31,184 +81,177 @@
     </style>
 </head>
 <body>
-<div class="container">
+  <div class="glass-card">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="text-start">Movie Recommender</h1>
-        <div>
-            Logged in as <strong>{{ username }}</strong>
-            <a href="/logout" class="btn btn-sm btn-outline-danger ms-2">Logout</a>
-        </div>
+      <h1 class="text-start">Movie Recommender</h1>
+      <div>
+        Logged in as <strong>{{ username }}</strong>
+        <a href="/logout" class="btn btn-sm btn-outline-danger ms-2">Logout</a>
+      </div>
     </div>
-
     <form id="movie-form">
-        <div id="movie-ratings"></div>
-        <div class="input-group mb-3">
-            <input type="text" id="movie-input" class="form-control" placeholder="Enter a movie title...">
-            <button class="btn btn-outline-secondary" type="submit">Add</button>
-        </div>
-        <div id="autocomplete-list" class="list-group position-relative"></div>
-        <button id="get-recommendations" class="btn btn-primary mt-3" type="button">Get Recommendations</button>
+      <div id="movie-ratings"></div>
+      <div class="input-group mb-3">
+        <input type="text" id="movie-input" class="form-control" placeholder="Enter a movie title...">
+        <button class="btn btn-outline-secondary" type="submit">Add</button>
+      </div>
+      <div id="autocomplete-list" class="list-group position-relative"></div>
+      <button id="get-recommendations" class="btn btn-primary mt-3" type="button">Get Recommendations</button>
     </form>
-
     <div id="loading" class="mt-4" style="display: none;">
-        <div class="progress">
-            <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
-        </div>
-        <p class="mt-2" id="progress-text">Starting...</p>
+      <div class="progress">
+        <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+      </div>
+      <p class="mt-2" id="progress-text">Starting...</p>
     </div>
-
     <div id="recommendations" class="mt-4"></div>
+  </div>
 
-    <hr>
-    <h3>My Saved Recommendations</h3>
-    <div id="saved-recommendations" class="mt-3"></div>
-</div>
+    <script>
+        const input = document.getElementById("movie-input");
+        const list = document.getElementById("autocomplete-list");
+        const form = document.getElementById("movie-form");
+        const ratingsDiv = document.getElementById("movie-ratings");
+        const recommendationsDiv = document.getElementById("recommendations");
+        const loadingDiv = document.getElementById("loading");
+        const progressBar = document.getElementById("progress-bar");
+        const progressText = document.getElementById("progress-text");
+        const savedDiv = document.getElementById("saved-recommendations");
+        const addedLabels = new Set();
 
-<script>
-    const input = document.getElementById("movie-input");
-    const list = document.getElementById("autocomplete-list");
-    const form = document.getElementById("movie-form");
-    const ratingsDiv = document.getElementById("movie-ratings");
-    const recommendationsDiv = document.getElementById("recommendations");
-    const loadingDiv = document.getElementById("loading");
-    const progressBar = document.getElementById("progress-bar");
-    const progressText = document.getElementById("progress-text");
-    const savedDiv = document.getElementById("saved-recommendations");
-    const addedLabels = new Set();
-
-    input.addEventListener("input", () => {
-        const query = input.value.trim();
-        if (!query) {
-            list.innerHTML = "";
-            return;
-        }
-        fetch(`/search?query=${encodeURIComponent(query)}`)
-            .then(res => res.json())
-            .then(data => {
+        input.addEventListener("input", () => {
+            const query = input.value.trim();
+            if (!query) {
                 list.innerHTML = "";
-                data.movies.forEach(label => {
-                    const item = document.createElement("div");
-                    item.className = "autocomplete-item";
-                    item.textContent = label;
-                    item.onclick = () => {
-                        if (!addedLabels.has(label)) {
-                            addedLabels.add(label);
-                            const div = document.createElement("div");
-                            div.className = "mb-2";
-                            div.innerHTML = `
-                                <label>${label}</label>
-                                <input type="number" min="1" max="5" step="0.5" class="form-control" name="${label}" placeholder="Rate 1-5">
-                            `;
-                            ratingsDiv.appendChild(div);
-                        }
-                        input.value = "";
-                        list.innerHTML = "";
-                    };
-                    list.appendChild(item);
-                });
-            });
-    });
-
-    document.getElementById("get-recommendations").onclick = () => {
-        const inputs = ratingsDiv.querySelectorAll("input");
-        const ratings = {};
-        inputs.forEach(input => {
-            const label = input.name;
-            const rating = parseFloat(input.value);
-            if (label && rating >= 1 && rating <= 5) {
-                ratings[label] = rating;
+                return;
             }
-        });
-        if (Object.keys(ratings).length === 0) return;
-
-        loadingDiv.style.display = "block";
-        progressBar.style.width = "0%";
-        progressText.textContent = "Starting...";
-        progressBar.classList.add("progress-bar-animated");
-        recommendationsDiv.innerHTML = "";
-
-        fetch("/prepare_recommendation", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(ratings)
-        }).then(() => {
-            const eventSource = new EventSource("/progress_recommend");
-
-            eventSource.onmessage = function (event) {
-                const data = JSON.parse(event.data);
-                progressBar.style.width = `${data.progress}%`;
-                progressText.textContent = data.step;
-
-                if (data.progress === 100) {
-                    eventSource.close();
-                    progressBar.classList.remove("progress-bar-animated");
-                    recommendationsDiv.innerHTML = `<h3>Recommendations</h3>`;
-                    if (data.recommendations.length === 0) {
-                        recommendationsDiv.innerHTML += "<p>No recommendations found.</p>";
-                    } else {
-                        const ul = document.createElement("ul");
-                        ul.className = "list-group";
-                        data.recommendations.forEach(title => {
-                            const li = document.createElement("li");
-                            li.className = "list-group-item";
-                            li.textContent = title;
-                            ul.appendChild(li);
-                        });
-                        recommendationsDiv.appendChild(ul);
-                    }
-
-                    fetch("/user_recommendations", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(ratings)
-                    }).then(() => loadSavedRecommendations());
-                }
-            };
-        });
-    };
-
-    function loadSavedRecommendations() {
-        fetch("/user_recommendations")
-            .then(res => res.json())
-            .then(data => {
-                savedDiv.innerHTML = "";
-                if (data.length === 0) {
-                    savedDiv.innerHTML = "<p>No saved recommendations.</p>";
-                    return;
-                }
-                const list = document.createElement("ul");
-                list.className = "list-group";
-                data.forEach(rec => {
-                    const li = document.createElement("li");
-                    li.className = "list-group-item d-flex justify-content-between align-items-center";
-                    li.innerHTML = `
-                        <span>${rec.title}</span>
-                        <div class="input-group input-group-sm" style="width: 150px;">
-                            <input type="number" min="1" max="5" step="0.5" class="form-control" value="${rec.rating}" onchange="updateRec(${rec.id}, this.value)">
-                            <button class="btn btn-danger" onclick="deleteRec(${rec.id})">🗑️</button>
-                        </div>
-                    `;
-                    list.appendChild(li);
+            fetch(`/search?query=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => {
+                    list.innerHTML = "";
+                    data.movies.forEach(label => {
+                        const item = document.createElement("div");
+                        item.className = "autocomplete-item";
+                        item.textContent = label;
+                        item.onclick = () => {
+                            if (!addedLabels.has(label)) {
+                                addedLabels.add(label);
+                                const div = document.createElement("div");
+                                div.className = "mb-2";
+                                div.innerHTML = `
+                                    <label>${label}</label>
+                                    <input type="number" min="1" max="5" step="0.5" class="form-control" name="${label}" placeholder="Rate 1-5">
+                                `;
+                                ratingsDiv.appendChild(div);
+                            }
+                            input.value = "";
+                            list.innerHTML = "";
+                        };
+                        list.appendChild(item);
+                    });
                 });
-                savedDiv.appendChild(list);
+        });
+
+        document.getElementById("get-recommendations").onclick = () => {
+            const inputs = ratingsDiv.querySelectorAll("input");
+            const ratings = {};
+            inputs.forEach(input => {
+                const label = input.name;
+                const rating = parseFloat(input.value);
+                if (label && rating >= 1 && rating <= 5) {
+                    ratings[label] = rating;
+                }
             });
-    }
+            if (Object.keys(ratings).length === 0) return;
 
-    function updateRec(id, newRating) {
-        fetch(`/user_recommendations/${id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rating: newRating })
-        }).then(loadSavedRecommendations);
-    }
+            loadingDiv.style.display = "block";
+            progressBar.style.width = "0%";
+            progressText.textContent = "Starting...";
+            progressBar.classList.add("progress-bar-animated");
+            recommendationsDiv.innerHTML = "";
 
-    function deleteRec(id) {
-        fetch(`/user_recommendations/${id}`, {
-            method: "DELETE"
-        }).then(loadSavedRecommendations);
-    }
+            fetch("/prepare_recommendation", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(ratings)
+            }).then(() => {
+                const eventSource = new EventSource("/progress_recommend");
 
-    loadSavedRecommendations();
-</script>
+                eventSource.onmessage = function (event) {
+                    const data = JSON.parse(event.data);
+                    progressBar.style.width = `${data.progress}%`;
+                    progressText.textContent = data.step;
+
+                    if (data.progress === 100) {
+                        eventSource.close();
+                        progressBar.classList.remove("progress-bar-animated");
+                        recommendationsDiv.innerHTML = `<h3>Recommendations</h3>`;
+                        if (data.recommendations.length === 0) {
+                            recommendationsDiv.innerHTML += "<p>No recommendations found.</p>";
+                        } else {
+                            const ul = document.createElement("ul");
+                            ul.className = "list-group";
+                            data.recommendations.forEach(title => {
+                                const li = document.createElement("li");
+                                li.className = "list-group-item";
+                                li.textContent = title;
+                                ul.appendChild(li);
+                            });
+                            recommendationsDiv.appendChild(ul);
+                        }
+
+                        fetch("/user_recommendations", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(ratings)
+                        }).then(() => loadSavedRecommendations());
+                    }
+                };
+            });
+        };
+
+        function loadSavedRecommendations() {
+            fetch("/user_recommendations")
+                .then(res => res.json())
+                .then(data => {
+                    savedDiv.innerHTML = "";
+                    if (data.length === 0) {
+                        savedDiv.innerHTML = "<p>No saved recommendations.</p>";
+                        return;
+                    }
+                    const list = document.createElement("ul");
+                    list.className = "list-group";
+                    data.forEach(rec => {
+                        const li = document.createElement("li");
+                        li.className = "list-group-item d-flex justify-content-between align-items-center";
+                        li.innerHTML = `
+                            <span>${rec.title}</span>
+                            <div class="input-group input-group-sm" style="width: 150px;">
+                                <input type="number" min="1" max="5" step="0.5" class="form-control" value="${rec.rating}" onchange="updateRec(${rec.id}, this.value)">
+                                <button class="btn btn-danger" onclick="deleteRec(${rec.id})">🗑️</button>
+                            </div>
+                        `;
+                        list.appendChild(li);
+                    });
+                    savedDiv.appendChild(list);
+                });
+        }
+
+        function updateRec(id, newRating) {
+            fetch(`/user_recommendations/${id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rating: newRating })
+            }).then(loadSavedRecommendations);
+        }
+
+        function deleteRec(id) {
+            fetch(`/user_recommendations/${id}`, {
+                method: "DELETE"
+            }).then(loadSavedRecommendations);
+        }
+
+        loadSavedRecommendations();
+    </script>
 </body>
 </html>

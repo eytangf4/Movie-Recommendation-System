@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Movie Recommender</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #e0e7ff 0%, #f8fafc 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .glass-card {
+      background: rgba(255,255,255,0.7);
+      border-radius: 2rem;
+      box-shadow: 0 8px 32px 0 rgba(31,38,135,0.18);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      padding: 3rem 2.5rem;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    .glass-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 2.5rem;
+      color: #2d3a4b;
+      letter-spacing: 1px;
+    }
+    .glass-btn {
+      width: 100%;
+      margin-bottom: 1.25rem;
+      font-size: 1.15rem;
+      padding: 0.85rem 0;
+      border-radius: 0.75rem;
+      font-weight: 500;
+      transition: box-shadow 0.2s;
+      background: rgba(79,140,255,0.12);
+      color: #2563eb;
+      border: 1px solid #c7d2fe;
+      backdrop-filter: blur(2px);
+    }
+    .glass-btn:last-child { margin-bottom: 0; }
+    .glass-btn:hover {
+      background: #4f8cff;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(79,140,255,0.15);
+    }
+    .glass-icon {
+      margin-right: 0.5em;
+      vertical-align: middle;
+      font-size: 1.2em;
+    }
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+</head>
+<body>
+  <div class="glass-card">
+    <div class="glass-title">Movie Recommender</div>
+    <a href="/library" class="btn glass-btn"><i class="fa-solid fa-film glass-icon"></i>Library</a>
+    <a href="/one_off_recommendations" class="btn glass-btn"><i class="fa-solid fa-bolt glass-icon"></i>One-Off Recommendations</a>
+  </div>
+</body>
+</html>

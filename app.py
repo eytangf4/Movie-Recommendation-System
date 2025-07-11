@@ -74,7 +74,7 @@ def signup():
         user_id = cursor.lastrowid
         session["user_id"] = user_id
         session["username"] = username
-        return jsonify({"message": "User created and logged in"}), 201
+        return jsonify({"message": "User created and logged in", "redirect": "/menu"}), 201
     except sqlite3.IntegrityError:
         return jsonify({"error": "Username already taken"}), 409
 
@@ -88,7 +88,7 @@ def login():
     if user and check_password_hash(user[1], password):
         session["user_id"] = user[0]
         session["username"] = username
-        return jsonify({"message": "Logged in"})
+        return jsonify({"message": "Logged in", "redirect": "/menu"})
     return jsonify({"error": "Invalid credentials"}), 401
 
 @app.route("/logout")
@@ -96,11 +96,41 @@ def logout():
     session.clear()
     return redirect("/")
 
+@app.route("/menu")
+def menu():
+    if "user_id" not in session:
+        return redirect("/")
+    return render_template("menu.html", username=session.get("username"))
+
 @app.route("/recommend")
 def recommend_page():
     if "user_id" not in session:
         return redirect("/")
     return render_template("index.html", username=session.get("username"))
+
+@app.route("/one_off_recommendations")
+def one_off_recommendations():
+    if "user_id" not in session:
+        return redirect("/")
+    return render_template("one_off_recommendations.html", username=session.get("username"))
+
+@app.route("/recommend_from_library")
+def recommend_from_library():
+    if "user_id" not in session:
+        return redirect("/")
+    return render_template("recommendations_from_library.html", username=session.get("username"))
+
+@app.route("/library")
+def library():
+    if "user_id" not in session:
+        return redirect("/")
+    return render_template("library.html", username=session.get("username"))
+
+@app.route("/recommendations_from_one_off")
+def recommendations_from_one_off():
+    if "user_id" not in session:
+        return redirect("/")
+    return render_template("recommendations_from_one_off.html", username=session.get("username"))
 
 # ----------------- User Recommendations ------------------
 @app.route("/user_recommendations", methods=["GET"])
@@ -118,7 +148,6 @@ def save_user_recommendations():
     data = request.get_json()
     db = get_db()
     for title, rating in data.items():
-        # Check if the movie already exists
         existing = db.execute("SELECT id FROM recommendations WHERE user_id = ? AND movie_title = ?", (session["user_id"], title)).fetchone()
         if existing:
             db.execute("UPDATE recommendations SET rating = ?, timestamp = CURRENT_TIMESTAMP WHERE id = ?", (rating, existing[0]))
@@ -251,6 +280,13 @@ def progress_recommend():
         yield f"data: {json.dumps({'progress': 100, 'step': 'Done', 'recommendations': recommended_titles})}\n\n"
 
     return Response(generate(), mimetype="text/event-stream")
+
+@app.route("/get_latest_oneoff_ratings")
+def get_latest_oneoff_ratings():
+    if "user_id" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    global latest_ratings_payload
+    return jsonify(latest_ratings_payload)
 
 if __name__ == "__main__":
     init_db()

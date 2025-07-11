@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>One-Off Recommendations</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #e0e7ff 0%, #f8fafc 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      color: #2d3a4b;
+    }
+    .glass-card {
+      background: rgba(255,255,255,0.7);
+      border-radius: 2rem;
+      box-shadow: 0 8px 32px 0 rgba(31,38,135,0.18);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      padding: 2.5rem 2rem 2rem 2rem;
+      max-width: 600px;
+      width: 100%;
+      text-align: center;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    h2 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      margin-bottom: 2rem;
+      color: #2d3a4b;
+      letter-spacing: 1px;
+    }
+    .input-group input, .input-group button {
+      border-radius: 0.75rem;
+      font-size: 1.1rem;
+    }
+    .btn-primary {
+      background: #4f8cff;
+      border: none;
+      border-radius: 0.75rem;
+      font-weight: 600;
+      font-size: 1.1rem;
+      padding: 0.7rem 0.9rem;
+      transition: background 0.2s;
+    }
+    .btn-primary:hover {
+      background: #2563eb;
+    }
+    .btn-secondary {
+      border-radius: 0.75rem;
+      font-weight: 600;
+      font-size: 1.1rem;
+      padding: 0.7rem 0.9rem;
+    }
+    .movie-entry {
+      display: grid;
+      grid-template-columns: 1fr 90px 90px;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      background: rgba(255,255,255,0.85);
+      border-radius: 0.75rem;
+      padding: 0.5rem 1rem;
+      box-shadow: 0 1px 4px rgba(31,38,135,0.05);
+      word-break: break-word;
+    }
+    .movie-entry span {
+      text-align: left;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      font-size: 1.05rem;
+      font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    }
+    .movie-entry input[type="number"] {
+      width: 70px;
+      min-width: 60px;
+      border-radius: 0.5rem;
+      font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 1.05rem;
+      text-align: center;
+    }
+    .delete-btn {
+        font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        background: #ef4444;
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        padding: 0.5rem 1.5rem;
+        font-size: 1.1rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.2s;
+        min-width: 90px;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.08);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .delete-btn:hover {
+        background: #dc2626;
+    }
+    #added-movies-list {
+      margin-top: 1.5rem;
+      text-align: left;
+    }
+    .button-row {
+      display: flex;
+      gap: 1.1rem;
+      justify-content: center;
+      margin-bottom: 1.1rem;
+    }
+    @media (max-width: 600px) {
+      .button-row {
+        flex-direction: column;
+        gap: 0.7rem;
+        align-items: stretch;
+      }
+      .glass-card { padding: 1.5rem 0.5rem; }
+      h2 { font-size: 1.5rem; }
+      .movie-entry { grid-template-columns: 1fr 60px 60px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="glass-card">
+    <h2>One-Off Recommendations</h2>
+    <div class="mb-4">
+      <div class="input-group">
+        <input type="text" id="movie-title" class="form-control" placeholder="Movie Title" autocomplete="off">
+        <input type="number" id="movie-rating" class="form-control" placeholder="Rating (1.0-5.0)" min="1" max="5" step="0.01">
+        <button class="btn btn-primary" onclick="addMovie()">Add Movie</button>
+      </div>
+      <div id="autocomplete-list" class="list-group position-relative"></div>
+    </div>
+    <div class="button-row">
+      <button class="btn btn-primary" onclick="getRecommendations()">Get Recommendations</button>
+      <button class="btn btn-secondary" onclick="window.location.href='/menu'">Back to Menu</button>
+    </div>
+    <div id="added-movies-list">
+      <p class="text-center">No movies added yet, add some to generate recommendations!</p>
+    </div>
+  </div>
+<script>
+let addedMovies = [];
+const listDiv = document.getElementById("added-movies-list");
+const movieTitleInput = document.getElementById("movie-title");
+const autocompleteList = document.getElementById("autocomplete-list");
+
+function addMovie() {
+  const title = document.getElementById("movie-title").value.trim();
+  let rating = parseFloat(document.getElementById("movie-rating").value);
+  if (!title || isNaN(rating) || rating < 1 || rating > 5) return;
+  // Round to one decimal place
+  rating = Math.round(rating * 10) / 10;
+  // If user entered integer, autocorrect to x.0
+  if (Number.isInteger(rating)) rating = rating.toFixed(1);
+  else rating = rating.toString();
+  const exists = addedMovies.find(m => m.title.toLowerCase() === title.toLowerCase());
+  if (exists) {
+    exists.rating = rating;
+  } else {
+    addedMovies.unshift({ title, rating });
+  }
+  renderList();
+  document.getElementById("movie-title").value = "";
+  document.getElementById("movie-rating").value = "";
+}
+
+function renderList() {
+  if (addedMovies.length === 0) {
+    listDiv.innerHTML = '<p class="text-center">No movies added yet, add some to generate recommendations!</p>';
+    return;
+  }
+  listDiv.innerHTML = "";
+  addedMovies.forEach((movie, index) => {
+    const div = document.createElement("div");
+    div.className = "movie-entry";
+    div.innerHTML = `
+      <span>${movie.title}</span>
+      <input type="number" min="1" max="5" step="0.5" value="${movie.rating}" onchange="updateRating(${index}, this.value)">
+      <button class="btn btn-danger btn-sm delete-btn" onclick="deleteMovie(${index})">Delete</button>
+    `;
+    listDiv.appendChild(div);
+  });
+}
+
+function updateRating(index, value) {
+  const rating = parseFloat(value);
+  if (!isNaN(rating) && rating >= 1 && rating <= 5) {
+    addedMovies[index].rating = rating;
+    renderList();
+  }
+}
+
+function deleteMovie(index) {
+  addedMovies.splice(index, 1);
+  renderList();
+}
+
+movieTitleInput.addEventListener("input", () => {
+  const query = movieTitleInput.value.trim();
+  if (!query) {
+    autocompleteList.innerHTML = "";
+    return;
+  }
+  fetch(`/search?query=${encodeURIComponent(query)}`)
+    .then(res => res.json())
+    .then(function(data) {
+      autocompleteList.innerHTML = "";
+      data.movies.forEach(label => {
+        const item = document.createElement("div");
+        item.className = "list-group-item list-group-item-action";
+        item.textContent = label;
+        item.onclick = () => {
+          movieTitleInput.value = label;
+          autocompleteList.innerHTML = "";
+          document.getElementById("movie-rating").focus();
+        };
+        autocompleteList.appendChild(item);
+      });
+    });
+});
+
+document.addEventListener("click", function(e) {
+  if (!autocompleteList.contains(e.target) && e.target !== movieTitleInput) {
+    autocompleteList.innerHTML = "";
+  }
+});
+
+function getRecommendations() {
+  if (addedMovies.length === 0) {
+    alert("Add at least one movie to get recommendations.");
+    return;
+  }
+  const ratings = Object.fromEntries(addedMovies.map(m => [m.title, m.rating]));
+  fetch("/prepare_recommendation", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(ratings)
+  }).then(function() {
+    window.location.href = "/recommendations_from_one_off";
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Recommendations from Library</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #e0e7ff 0%, #f8fafc 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      color: #2d3a4b;
+    }
+    .glass-card {
+      background: rgba(255,255,255,0.7);
+      border-radius: 2rem;
+      box-shadow: 0 8px 32px 0 rgba(31,38,135,0.18);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      padding: 2.5rem 2rem 2rem 2rem;
+      max-width: 600px;
+      width: 100%;
+      text-align: center;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    h2 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      margin-bottom: 2rem;
+      color: #2d3a4b;
+      letter-spacing: 1px;
+    }
+    .btn-secondary {
+      border-radius: 0.75rem;
+      font-weight: 600;
+      font-size: 1.1rem;
+      padding: 0.7rem 0.9rem;
+    }
+    .progress {
+      margin-bottom: 1rem;
+    }
+    .list-group-item {
+      background: rgba(255,255,255,0.85);
+      border-radius: 0.75rem;
+      margin-bottom: 0.5rem;
+      font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 1.05rem;
+      color: #2d3a4b;
+      box-shadow: 0 1px 4px rgba(31,38,135,0.05);
+    }
+  </style>
+</head>
+<body>
+  <div class="glass-card">
+    <h2>Recommendations from Your Library</h2>
+    <div class="mb-3 d-flex gap-2 justify-content-center">
+      <button class="btn btn-secondary" onclick="goBackToLibrary()">Back to Library</button>
+      <button class="btn btn-secondary" onclick="goBack()">Back to Menu</button>
+    </div>
+
+    <div id="loading" class="my-4" style="display: none;">
+      <div class="progress">
+        <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+      </div>
+      <p class="mt-2" id="progress-text">Starting...</p>
+    </div>
+
+    <div id="recommendations"></div>
+
+    <hr>
+    <h4>Your Library</h4>
+    <div id="library-list"></div>
+  </div>
+
+  <script>
+    const loadingDiv = document.getElementById("loading");
+    const progressBar = document.getElementById("progress-bar");
+    const progressText = document.getElementById("progress-text");
+    const recommendationsDiv = document.getElementById("recommendations");
+    const libraryDiv = document.getElementById("library-list");
+
+    function goBack() {
+      window.location.href = "/menu";
+    }
+
+    function goBackToLibrary() {
+      window.location.href = "/library";
+    }
+
+    function renderLibrary(library) {
+      libraryDiv.innerHTML = "";
+      if (library.length === 0) {
+        libraryDiv.innerHTML = "<p>No movies in your library.</p>";
+        return;
+      }
+      const ul = document.createElement("ul");
+      ul.className = "list-group";
+      library.forEach(item => {
+        const li = document.createElement("li");
+        li.className = "list-group-item";
+        li.textContent = `${item.title} (Rating: ${item.rating})`;
+        ul.appendChild(li);
+      });
+      libraryDiv.appendChild(ul);
+    }
+
+    function generateRecommendations(libraryRatings) {
+      loadingDiv.style.display = "block";
+      progressBar.style.width = "0%";
+      progressText.textContent = "Starting...";
+      progressBar.classList.add("progress-bar-animated");
+      recommendationsDiv.innerHTML = "";
+
+      fetch("/prepare_recommendation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(libraryRatings)
+      }).then(() => {
+        const eventSource = new EventSource("/progress_recommend");
+
+        eventSource.onmessage = function (event) {
+          const data = JSON.parse(event.data);
+          progressBar.style.width = `${data.progress}%`;
+          progressText.textContent = data.step;
+
+          if (data.progress === 100) {
+            eventSource.close();
+            progressBar.classList.remove("progress-bar-animated");
+            loadingDiv.style.display = "none";
+            recommendationsDiv.innerHTML = `<h3>Recommendations</h3>`;
+            if (data.recommendations.length === 0) {
+              recommendationsDiv.innerHTML += "<p>No recommendations found.</p>";
+            } else {
+              const ul = document.createElement("ul");
+              ul.className = "list-group";
+              data.recommendations.forEach(title => {
+                const li = document.createElement("li");
+                li.className = "list-group-item";
+                li.textContent = title;
+                ul.appendChild(li);
+              });
+              recommendationsDiv.appendChild(ul);
+            }
+          }
+        };
+      });
+    }
+
+    fetch("/user_recommendations")
+      .then(res => res.json())
+      .then(data => {
+        renderLibrary(data);
+        const ratings = {};
+        data.forEach(item => ratings[item.title] = item.rating);
+        if (Object.keys(ratings).length > 0) {
+          generateRecommendations(ratings);
+        }
+      });
+  </script>
+</body>
+</html>
