@@ -1,65 +1,64 @@
-# 🎬📺 Movie & TV Show Recommendation System
+# 🎬 Movie Recommendation System
 
-A **Flask-based web app** that recommends **movies and TV shows** based on your personal preferences using a **hybrid of collaborative filtering and content-based filtering**.
-
-It combines user ratings from the **MovieLens** dataset with real-time metadata from the **TMDb API** to generate intelligent, personalized recommendations.
+A **Flask-based web app** where you log in, rate movies you’ve seen, and get instant, personalized movie recommendations tailored to your taste. Built with a modern glassmorphism UI and MovieLens data.
 
 ---
 
 ## 🚀 Features
 
-- 🔍 Autocomplete search for movie/TV titles (from MovieLens + TMDb)
+- 🔐 User authentication (signup, login, logout)
+- 📚 Add, update, and delete movies in your personal library
+- ➕ Adding a movie saves it instantly; deleting/updating requires pressing "Save Library" or "Discard Changes"
+- 🔍 Autocomplete search for movie titles (from MovieLens)
 - 📊 Hybrid recommendation engine (Collaborative + Content-Based)
-- 🎯 User rating input on a scale of 1–100
+- ⭐ User rating input as a float (1.0–5.0, one decimal)
 - 🚫 Input movies are excluded from recommendations
-- ⏳ Loading bar with percentage & animation while recommendations are generated
-- 💡 Uses real-world ratings + metadata (genres, cast, director)
-- 🎨 Clean, responsive UI with Bootstrap
+- ⏳ Animated loading bar while recommendations are generated
+- 🎨 Clean, modern glassmorphism UI with Bootstrap
+- 📝 Library and one-off recommendation modes
 
 ---
 
 ## 🧠 How It Works
 
 ### 🧾 User Input
-You enter titles and assign ratings between 1 and 100.
+Log in, add movies to your library and rate them (1.0–5.0, one decimal). Additions save instantly; deletions/updates require saving.
 
 ### 🤝 Collaborative Filtering (60%)
-We use real user ratings from the MovieLens dataset to find similar preferences using Approximate Nearest Neighbors on a sparse matrix.
+Uses real user ratings from the MovieLens dataset and SVD/cosine similarity to find similar preferences.
 
 ### 🎬 Content-Based Filtering (40%)
-We pull metadata from the TMDb API and apply TF-IDF + cosine similarity to compare genres, cast, and directors.
+Uses genres from MovieLens and applies TF-IDF + cosine similarity.
 
 ### ⚡ Hybrid Model
-Final scores combine both CF and CBF methods and are ranked to generate top 10 recommendations.
+Final scores combine both collaborative and content-based methods and are ranked to generate the top 10 recommendations.
 
 ---
 
 ## 💻 Installation
 
 ### 1. Clone the repository
-```
-git clone https://github.com/yourusername/movie-tv-recommender.git
-cd movie-tv-recommender
+```sh
+git clone <your-repo-url>
+cd Movie Recommendation System
 ```
 
 ### 2. Install dependencies
-```
+```sh
 pip install -r requirements.txt
 ```
 
 ### 3. Download MovieLens data
-Download `ratings.csv` and `movies.csv` from the [MovieLens 20M dataset](https://grouplens.org/datasets/movielens/20m/) and place them in the root folder.
+Download `ratings.csv` and `movies.csv` from the [MovieLens 20M dataset](https://grouplens.org/datasets/movielens/20m/) and place them in the `data/` folder.
 
-### 4. Get a TMDb API Key
-Sign up at [https://www.themoviedb.org/](https://www.themoviedb.org/) and request a free developer API key.
-
+### 4. Set up environment variables
 Create a `.env` file in the root of the project with:
 ```
-TMDB_API_KEY=your_api_key_here
+FLASK_SECRET_KEY=your_secret_key_here
 ```
 
 ### 5. Run the Flask app
-```
+```sh
 python app.py
 ```
 
@@ -69,19 +68,19 @@ Open your browser at [http://127.0.0.1:8080](http://127.0.0.1:8080)
 
 ## 🖼️ UI Features
 
-- 🔍 Search bar with release year support
-- ➕ Add/remove inputs dynamically
-- 💯 Ratings out of 100
-- 🔄 Real-time loading bar while generating results
-- 🎬 Personalized, ranked recommendations (excluding what you already rated)
+- Glassmorphism card layout for all pages
+- Responsive design with Bootstrap
+- Autocomplete and dynamic add/remove for movie inputs
+- Real-time loading bar while generating results
+- Personalized, ranked recommendations (excluding what you already rated)
+- Library and one-off recommendation flows
 
 ---
 
 ## 🔮 Future Ideas
 
-- [ ] Filter by genre, media type, or maturity rating
-- [ ] Show movie/TV posters via TMDb
-- [ ] Save user profiles and rating history
+- [ ] Filter by genre or year
+- [ ] Show movie posters
 - [ ] Pagination and mobile optimization
 
 ---
@@ -95,5 +94,4 @@ MIT License — Free to use, modify, and share!
 ## 🙌 Acknowledgments
 
 - [MovieLens Dataset](https://grouplens.org/datasets/movielens/)
-- [TMDb API](https://www.themoviedb.org/)
 - Bootstrap, Flask, scikit-learn, pandas

@@ -156,7 +156,7 @@
 </head>
 <body>
   <div class="glass-card">
-    <h2>Edit Library</h2>
+    <h2>Library</h2>
     <div class="mb-4">
       <div class="input-group">
         <input type="text" id="movie-title" class="form-control" placeholder="Movie Title" autocomplete="off">
@@ -243,8 +243,16 @@ function addMovie() {
   } else {
     currentLibrary.unshift({ title, rating });
   }
-  renderList();
-  markUnsaved();
+  // Save immediately to backend
+  fetch("/user_recommendations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(Object.fromEntries(currentLibrary.map(m => [m.title, m.rating])))
+  }).then(() => {
+    originalLibrary = JSON.parse(JSON.stringify(currentLibrary));
+    renderList();
+    markUnsaved();
+  });
   document.getElementById("movie-title").value = "";
   document.getElementById("movie-rating").value = "";
 }
@@ -289,8 +297,14 @@ function saveLibrary() {
     body: JSON.stringify(Object.fromEntries(currentLibrary.map(m => [m.title, m.rating])))
   }).then(() => {
     originalLibrary = JSON.parse(JSON.stringify(currentLibrary));
+    renderList();
+    markUnsaved();
     saveBtn.disabled = true;
-    window.location.href = "/menu";
+    saveBtn.textContent = "Saved!";
+    setTimeout(() => {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save Library";
+    }, 1200);
   });
 }
 

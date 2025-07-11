@@ -147,12 +147,19 @@ def save_user_recommendations():
         return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json()
     db = get_db()
+    # Update or insert ratings
     for title, rating in data.items():
         existing = db.execute("SELECT id FROM recommendations WHERE user_id = ? AND movie_title = ?", (session["user_id"], title)).fetchone()
         if existing:
             db.execute("UPDATE recommendations SET rating = ?, timestamp = CURRENT_TIMESTAMP WHERE id = ?", (rating, existing[0]))
         else:
             db.execute("INSERT INTO recommendations (user_id, movie_title, rating) VALUES (?, ?, ?)", (session["user_id"], title, rating))
+    # Delete movies not in the new list
+    if data:
+        placeholders = ','.join(['?'] * len(data))
+        db.execute(f"DELETE FROM recommendations WHERE user_id = ? AND movie_title NOT IN ({placeholders})", (session["user_id"], *data.keys()))
+    else:
+        db.execute("DELETE FROM recommendations WHERE user_id = ?", (session["user_id"],))
     db.commit()
     return jsonify({"message": "Recommendations saved or updated"})
 
